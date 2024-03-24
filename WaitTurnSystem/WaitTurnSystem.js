@@ -35,7 +35,7 @@ ATのユニットが行動終了すると、そのユニットの現在WT値に�
 
 基本WT値 = クラスのWT値 - ユニットの速さ + 所持アイテムの重量の合計
 
-行動終了後に加算されるWT値 = 基本WT値 x 補正倍率※
+行動終了後に加算されるWT値 = 基本WT値 x 補正倍率※ (小数点以下切り捨て)
 
 ※補正倍率の内訳は以下の通り
 移動と行動を両方行った場合→1
@@ -111,7 +111,7 @@ WaitTurnOrderManager.initialize();
 
 [任意]
 
-5. このファイルの191～194行目の行動順リストの描画に関するパラメータを必要に応じて変更する。
+5. このファイルの209～212行目の行動順リストの描画に関するパラメータを必要に応じて変更する。
 
 例)行動順リストの開始位置のy座標を100、表示数を10にしたい場合
 var WaitTurnOrderParam = {
@@ -153,7 +153,7 @@ WaitTurnOrderManager.getATCount(ユニットのID, ユニットの所属) === AT
 WaitTurnOrderManager.getATCount(5, UnitGroup.ENEMY) === 2
 
 
-また、"==="の部分を以下のように変更することもできます。
+"==="の部分は、判定したい条件に応じて以下のように変更することもできます。
 
 <   未満
 <=  以下
@@ -163,6 +163,21 @@ WaitTurnOrderManager.getATCount(5, UnitGroup.ENEMY) === 2
 例)プレイヤーのID:3のユニットにATがまわってきた回数が5回以上のとき
 
 WaitTurnOrderManager.getATCount(3, UnitGroup.PLAYER) >= 5
+
+
+また、以下のテキストをイベントの実行条件の「スクリプト」に貼り付けることで
+「現在のマップが開始してから経過したWT値の合計」で条件判定できます。
+
+WaitTurnOrderManager.getMapTotalWT()
+
+例)合計WT値が1000以上のとき
+
+WaitTurnOrderManager.getMapTotalWT() >= 1000
+
+
+上記の WaitTurnOrderManager.getMapTotalWT() は戻り値として合計WT値を返すので、
+スクリプトの実行で変数に入れることもできます。
+これを利用して「ゲーム開始からゲームクリアまでに経過した合計WT値をカウントする」などの応用も可能です。
 
 
 
@@ -180,6 +195,9 @@ SRPG Studio version:1.291
 ・SRPG Studioの利用規約は遵守してください。
 
 【更新履歴】
+Ver.1.1  2024/3/34  現在のマップの合計WT値を取得する機能を追加。
+                    オープニングイベントに特定のイベントコマンドがあるとエラー落ちする不具合を修正。
+                    行動終了後に加算されるWT値を計算するとき、小数点以下を切り捨てる処理がされていなかった不具合を修正。
 Ver.1.0  2024/3/23  初版
 
 
@@ -221,7 +239,7 @@ var WaitTurnOrderManager = {
 
     // ユニットリストと行動順リストを更新する
     update: function (isInitialize, isAttackTurnEnd) {
-        var i, j, count, unit, atUnit, atCurWT, defaultWT, obj, curMapInfo;
+        var i, j, count, unit, atUnit, atCurWT, totalWT, defaultWT, obj, curMapInfo;
         var playerList = PlayerList.getSortieList();
         var enemyList = EnemyList.getAliveList();
         var allyList = AllyList.getAliveList();
@@ -282,12 +300,12 @@ var WaitTurnOrderManager = {
 
         if (isAttackTurnEnd) {
             atUnit.custom.atCount += 1;
-            curMapInfo = root.getCurrentSession().getCurrentMapInfo();
+            totalWT = this.getMapTotalWT();
 
-            if (curMapInfo.custom.totalWT == null || typeof curMapInfo.custom.totalWT !== "number") {
-                curMapInfo.custom.totalWT = 0;
+            if (totalWT == null) {
+                this.setMapTotalWT(0);
             } else {
-                curMapInfo.custom.totalWT += atCurWT;
+                this.setMapTotalWT(totalWT + atCurWT);
             }
         }
 
@@ -347,14 +365,15 @@ var WaitTurnOrderManager = {
 
     // ATユニットがとろうとしている行動内容に応じて予測行動順リストを取得する
     getPredictOrderList: function (atUnit) {
-        var i, count, obj, unit;
+        var sumWT, i, count, obj, unit;
         var predictOrderList = [];
         var pushCount = 0;
-        var sumWT = atUnit.custom.curWT;
 
-        if (atUnit == null || sumWT == null || typeof sumWT !== "number") {
+        if (atUnit == null || atUnit.custom.curWT == null || typeof atUnit.custom.curWT !== "number") {
             return null;
         }
+
+        sumWT = atUnit.custom.curWT;
 
         count = this._orderList.length;
         for (i = 0; i < count; i++) {
@@ -524,9 +543,9 @@ var WaitTurnOrderManager = {
         if (hasMoved && hasActioned) {
             return defaultWT;
         } else if (hasMoved || hasActioned) {
-            return Math.min((defaultWT * 3) / 4);
+            return Math.floor((defaultWT * 3) / 4);
         } else {
-            return Math.min(defaultWT / 2);
+            return Math.floor(defaultWT / 2);
         }
     },
 
@@ -578,6 +597,28 @@ var WaitTurnOrderManager = {
         }
 
         return -1;
+    },
+
+    // 現在のマップの合計WT値を取得する
+    getMapTotalWT: function () {
+        var curMapInfo = root.getCurrentSession().getCurrentMapInfo();
+
+        if (curMapInfo == null || curMapInfo.custom.totalWT == null || typeof curMapInfo.custom.totalWT !== "number") {
+            return null;
+        }
+
+        return curMapInfo.custom.totalWT;
+    },
+
+    // 現在のマップの合計WT値を設定する
+    setMapTotalWT: function (totalWT) {
+        var curMapInfo = root.getCurrentSession().getCurrentMapInfo();
+
+        if (curMapInfo == null) {
+            return;
+        }
+
+        curMapInfo.custom.totalWT = totalWT;
     },
 
     // 行動順予測用のカスパラを初期化する
@@ -933,7 +974,7 @@ var WaitTurnOrderManager = {
         var mhp = ParamBonus.getMhp(unit);
         var atUnit = WaitTurnOrderManager.getATUnit();
 
-        if (scene === SceneType.FREE && unit.getId() === atUnit.getId()) {
+        if (scene === SceneType.FREE && atUnit != null && unit.getId() === atUnit.getId()) {
             unit.custom.hasTradedItem = true;
         }
 
@@ -1272,10 +1313,9 @@ var WaitTurnOrderManager = {
     };
 
     UnitSimpleRenderer._drawWT = function (x, y, unit, textui) {
-        var defaultWT;
-        var curWT = unit.custom.curWT;
+        var curWT, defaultWT;
 
-        if (curWT == null || typeof curWT !== "number") {
+        if (unit == null || unit.custom.curWT == null || typeof unit.custom.curWT !== "number") {
             return;
         }
 
@@ -1318,6 +1358,7 @@ var WaitTurnOrderManager = {
             // そのユニットが画面内にいるときのみ描画する
             if (
                 this._isMapInside(unit) == true &&
+                unit.custom.orderNum != null &&
                 typeof unit.custom.orderNum === "number" &&
                 unit.custom.orderNum > 0
             ) {
@@ -1337,6 +1378,7 @@ var WaitTurnOrderManager = {
             // そのユニットが画面内にいるときのみ描画する
             if (
                 this._isMapInside(unit) == true &&
+                unit.custom.orderNum != null &&
                 typeof unit.custom.orderNum === "number" &&
                 unit.custom.orderNum > 0
             ) {
@@ -1356,6 +1398,7 @@ var WaitTurnOrderManager = {
             // そのユニットが画面内にいるときのみ描画する
             if (
                 this._isMapInside(unit) == true &&
+                unit.custom.orderNum != null &&
                 typeof unit.custom.orderNum === "number" &&
                 unit.custom.orderNum > 0
             ) {
@@ -1534,12 +1577,11 @@ var WaitTurnOrderManager = {
         },
 
         getObjectivePartsValue: function () {
-            var curMapInfo = root.getCurrentSession().getCurrentMapInfo();
-            var totalWT = curMapInfo.custom.totalWT;
+            var totalWT = WaitTurnOrderManager.getMapTotalWT();
 
-            if (totalWT == null || typeof totalWT !== "number") {
+            if (totalWT == null) {
                 totalWT = 0;
-                curMapInfo.custom.totalWT = totalWT;
+                WaitTurnOrderManager.setMapTotalWT(totalWT);
             }
 
             return totalWT;
@@ -1558,20 +1600,20 @@ var WaitTurnOrderManager = {
     };
 
     LoadSaveScrollbar._drawTotalWT = function (xBase, yBase, object) {
-        var width;
+        var width, totalWT;
         var textui = this._getWindowTextUI();
         var font = textui.getFont();
         var text = StringTable.Signal_TotalWT;
         var sceneType = object.getSceneType();
-        var totalWT = object.custom.mapTotalWT;
         var x = xBase + 80;
         var y = yBase + 25;
 
         if (
             (sceneType === SceneType.FREE || sceneType === SceneType.BATTLESETUP) &&
-            totalWT != null &&
-            typeof totalWT === "number"
+            object.custom.mapTotalWT != null &&
+            typeof object.custom.mapTotalWT === "number"
         ) {
+            totalWT = object.custom.mapTotalWT;
             TextRenderer.drawKeywordText(x, y, text, -1, ColorValue.INFO, font);
             width = TextRenderer.getTextWidth(text, font) + 30;
             NumberRenderer.drawNumber(x + width, y, totalWT);
@@ -1594,16 +1636,16 @@ var WaitTurnOrderManager = {
     };
 
     LoadSaveScreen._executeSave = function () {
-        var curMapInfo;
+        var totalWT;
         var index = this._scrollbar.getIndex();
         var customObject = this._getCustomObject();
         var sceneType = root.getCurrentScene();
 
         if (sceneType === SceneType.FREE || sceneType === SceneType.BATTLESETUP) {
-            curMapInfo = root.getCurrentSession().getCurrentMapInfo();
+            totalWT = WaitTurnOrderManager.getMapTotalWT();
 
-            if (curMapInfo.custom.totalWT != null && typeof curMapInfo.custom.totalWT === "number") {
-                customObject.mapTotalWT = curMapInfo.custom.totalWT;
+            if (totalWT != null) {
+                customObject.mapTotalWT = totalWT;
             }
         }
 

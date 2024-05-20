@@ -1,6 +1,6 @@
 /*-----------------------------------------------------------------------------------------------------------------
 
-「時戻しプラグイン」 Ver.1.0
+「時戻しプラグイン」 Ver.1.1
 
 
 【概要】
@@ -38,6 +38,8 @@ SRPG Studio version:1.293
 
 【更新履歴】
 Ver.1.0  2024/5/19  初版
+Ver.1.1  2024/5/20  古いバージョンのSRPG Studioを使用しているとレコード作成時にエラー落ちする不具合を修正。
+                    乱数取得をroot.getRandomNumber()で行っていた箇所をProbability.getRandomNumber()に変更。
 
 
 *----------------------------------------------------------------------------------------------------------------*/
@@ -119,27 +121,27 @@ var RecordType = {
 
 // レコードの種類に対応する文字列
 // ユニットの行動を表すものは頭にユニット名がつくことを想定して設定する
-var RECORD_TITLE_STRING_ARRAY = [
-    "ターン目開始", // 自軍フェイズ開始
-    "が攻撃した", // 攻撃
-    "が杖を使った", // 杖
-    "が盗んだ", // 盗む
-    "が救出した", // フュージョン(キャッチ)
-    "が引き渡しした", // フュージョン(トレード)
-    "が降ろした", // フュージョン(リリース)
-    "が捕獲した", // フュージョン攻撃
-    "が変身した", // 形態変化
-    "が変身解除した", // 形態変化解除
-    "が占拠した", // 占拠
-    "が宝箱を開けた", // 宝箱
-    "が訪問した", // 村
-    "が店に入った", // 店
-    "が扉を開けた", // 扉
-    "がアイテムを使った", // アイテム
-    "が待機した", // 待機
-    "敵軍フェイズ進行中", // 敵軍フェイズ進行中
-    "同盟軍フェイズ進行中" // 同盟軍フェイズ進行中
-];
+var RecordTitleString = {
+    0: "ターン目開始", // 自軍フェイズ開始
+    1: "が攻撃した", // 攻撃
+    2: "が杖を使った", // 杖
+    3: "が盗んだ", // 盗む
+    4: "が救出した", // フュージョン(キャッチ)
+    5: "が引き渡しした", // フュージョン(トレード)
+    6: "が降ろした", // フュージョン(リリース)
+    7: "が捕獲した", // フュージョン攻撃
+    8: "が変身した", // 形態変化
+    9: "が変身解除した", // 形態変化解除
+    10: "が占拠した", // 占拠
+    11: "が宝箱を開けた", // 宝箱
+    12: "が訪問した", // 村
+    13: "が店に入った", // 店
+    14: "が扉を開けた", // 扉
+    15: "がアイテムを使った", // アイテム
+    16: "が待機した", // 待機
+    17: "敵軍フェイズ進行中", // 敵軍フェイズ進行中
+    18: "同盟軍フェイズ進行中" // 同盟軍フェイズ進行中
+};
 
 // 設定項目はここまで
 
@@ -166,6 +168,7 @@ var RewindTimeManager = {
     _isRepeatMoveMode: false,
     _isRewinded: false,
     _isOtherPhazeRewinded: false,
+    _srpgStudioScriptVersion: 0,
 
     // 自動開始イベントでマップ開始時に呼ぶ
     startMap: function () {
@@ -236,6 +239,7 @@ var RewindTimeManager = {
         this._curRecordType = RecordType.UNIT_WAIT;
         this._curActionUnit = null;
         this._isRewinded = false;
+        this._srpgStudioScriptVersion = root.getScriptVersion();
     },
 
     initRecordArray: function (isStartMap, globalCustom) {
@@ -857,7 +861,10 @@ var RewindTimeManager = {
 
     rewindMapBoundary: function (mapBoundaryParam, curSession) {
         curSession.setMapBoundaryValue(mapBoundaryParam.value);
-        curSession.setMapBoundaryValueEx(mapBoundaryParam.valueX, mapBoundaryParam.valueY);
+
+        if (this._srpgStudioScriptVersion >= 1287) {
+            curSession.setMapBoundaryValueEx(mapBoundaryParam.valueX, mapBoundaryParam.valueY);
+        }
     },
 
     rewindTurnCount: function (turnCount, curSession) {
@@ -1179,6 +1186,10 @@ var RewindTimeManager = {
 
     createUnitNameRecord: function (unit, unitParam, newLatestUnitParam, latestName, isFirstRecord) {
         var name = unit.getName();
+
+        if (this._srpgStudioScriptVersion < 1061) {
+            return;
+        }
 
         if (isFirstRecord || name !== latestName) {
             unitParam.name = name;
@@ -1891,11 +1902,14 @@ var RewindTimeManager = {
         var newLatestBoundaryParam = {};
 
         mapBoundaryParam.value = curSession.getMapBoundaryValue();
-        mapBoundaryParam.valueX = curSession.getMapBoundaryValueExX();
-        mapBoundaryParam.valueY = curSession.getMapBoundaryValueExY();
         newLatestBoundaryParam.value = mapBoundaryParam.value;
-        newLatestBoundaryParam.valueX = mapBoundaryParam.valueX;
-        newLatestBoundaryParam.valueY = mapBoundaryParam.valueY;
+
+        if (this._srpgStudioScriptVersion >= 1287) {
+            mapBoundaryParam.valueX = curSession.getMapBoundaryValueExX();
+            mapBoundaryParam.valueY = curSession.getMapBoundaryValueExY();
+            newLatestBoundaryParam.valueX = mapBoundaryParam.valueX;
+            newLatestBoundaryParam.valueY = mapBoundaryParam.valueY;
+        }
 
         if (isFirstRecord || this.hasDiffProperties(mapBoundaryParam, latestMapBoundaryParam)) {
             record.mapBoundaryParam = mapBoundaryParam;
@@ -2281,7 +2295,7 @@ var RewindTimeManager = {
             record = recordArray[i];
             recordType = record.recordType;
             unitName = record.unitName;
-            text = unitName + RECORD_TITLE_STRING_ARRAY[recordType];
+            text = unitName + RecordTitleString[recordType];
 
             if (recordType === RecordType.TURN_START) {
                 text = record.turnCount + text;
@@ -3101,6 +3115,63 @@ var GetNumberTokenStateType = {
         var globalCustom = root.getMetaSession().global;
 
         globalCustom.curSeed = curSeed;
+    };
+
+    /*-----------------------------------------------------------------------------------------------------------------
+        root.getRandomNumber()を使用している箇所をProbability.getRandomNumber()に置き換える
+    *----------------------------------------------------------------------------------------------------------------*/
+    RestrictedExperienceControl._createObjectArray = function (unit) {
+        var i, obj;
+        var count = ParamGroup.getParameterCount();
+        var objectArray = [];
+        var weapon = ItemControl.getEquippedWeapon(unit);
+
+        for (i = 0; i < count; i++) {
+            obj = {};
+            obj.index = i;
+            obj.percent = ParamGroup.getGrowthBonus(unit, i) + ParamGroup.getUnitTotalGrowthBonus(unit, i, weapon);
+            obj.value = ExperienceControl._getGrowthValue(obj.percent);
+            // 同一成長率のパラメータが存在した場合に、どちらのパラメータが優先されるかは乱数で決める
+            obj.rand = Probability.getRandomNumber() % count;
+
+            objectArray[i] = obj;
+        }
+
+        return objectArray;
+    };
+
+    Miscellaneous.getRandomBackgroundHandle = function () {
+        var isRuntime = false;
+        var list, count, graphicsIndex, colorIndex, pic, graphicsId;
+
+        // 最初にオリジナル背景を調べる
+        list = root.getBaseData().getGraphicsResourceList(GraphicsType.EVENTBACK, isRuntime);
+        count = list.getCount();
+        if (count === 0) {
+            isRuntime = true;
+            list = root.getBaseData().getGraphicsResourceList(GraphicsType.EVENTBACK, isRuntime);
+            count = list.getCount();
+        }
+
+        graphicsIndex = Probability.getRandomNumber() % count;
+
+        // 0、1、2(朝、夕、夜)のいずれかの色を取得
+        colorIndex = Probability.getRandomNumber() % 3;
+
+        pic = list.getCollectionData(graphicsIndex, colorIndex);
+        if (pic !== null) {
+            graphicsId = pic.getId();
+        } else {
+            colorIndex = 0;
+            pic = list.getCollectionData(graphicsIndex, colorIndex);
+            if (pic !== null) {
+                graphicsId = pic.getId();
+            } else {
+                graphicsId = list.getCollectionData(0, 0).getId();
+            }
+        }
+
+        return root.createResourceHandle(isRuntime, graphicsId, colorIndex, 0, 0);
     };
 
     /*-----------------------------------------------------------------------------------------------------------------

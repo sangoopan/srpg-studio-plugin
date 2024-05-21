@@ -1,6 +1,6 @@
 /*-----------------------------------------------------------------------------------------------------------------
 
-「時戻しプラグイン」 Ver.1.1
+「時戻しプラグイン」 Ver.1.2
 
 
 【概要】
@@ -27,7 +27,7 @@ https://github.com/sangoopan/srpg-studio-plugin/tree/master/RewindTimeSystem#rea
 さんごぱん(https://twitter.com/sangoopan)
 
 【対応バージョン】
-SRPG Studio version:1.293
+SRPG Studio version:1.294
 
 【利用規約】
 ・利用はSRPG Studioを使ったゲームに限ります。
@@ -40,6 +40,7 @@ SRPG Studio version:1.293
 Ver.1.0  2024/5/19  初版
 Ver.1.1  2024/5/20  古いバージョンのSRPG Studioを使用しているとレコード作成時にエラー落ちする不具合を修正。
                     乱数取得をroot.getRandomNumber()で行っていた箇所をProbability.getRandomNumber()に変更。
+Ver.1.2  2024/5/21  時戻しの上限回数を難易度毎に設定できる機能を追加。
 
 
 *----------------------------------------------------------------------------------------------------------------*/
@@ -53,9 +54,13 @@ var REWIND_COMMAND_NAME = "時戻し";
 // 0が一番上
 var REWIND_COMMAND_INDEX = 0;
 
-// 1マップあたりの時戻しの上限回数
-// 0未満の場合は無制限として扱う
-var REWIND_COUNT_LIMIT = -1;
+// 各難易度の1マップあたりの時戻しの上限回数
+// 0未満の数値を指定した場合は無制限として扱う
+var RewindCountLimit = {
+    0: -1, // ID:0の難易度
+    1: 10, // ID:1の難易度
+    2: 3 // ID:2の難易度
+};
 
 // 時戻しを実行するか確認するメッセージ
 var REWIND_EXEC_QUESTION_MESSAGE = "巻き戻しますか？";
@@ -172,9 +177,11 @@ var RewindTimeManager = {
 
     // 自動開始イベントでマップ開始時に呼ぶ
     startMap: function () {
+        var difficulty = root.getMetaSession().getDifficulty();
+
         this.initIsIgnoredSwitchArray(true);
         this.initIsIgnoredSwitchArray(false);
-        this.setMaxRewindCount(REWIND_COUNT_LIMIT);
+        this.setMaxRewindCount(RewindCountLimit[difficulty.getId()]);
         this.initRemainRewindCount();
         Probability.initSeed();
         this.initParam(true);
@@ -2339,7 +2346,7 @@ var RewindTimeManager = {
 
     setMaxRewindCount: function (maxRewindCount) {
         var globalCustom = this.getGlobalCustom();
-        globalCustom.maxRewindCount = maxRewindCount;
+        globalCustom.maxRewindCount = maxRewindCount === undefined ? -1 : maxRewindCount;
     },
 
     getRemainRewindCount: function () {

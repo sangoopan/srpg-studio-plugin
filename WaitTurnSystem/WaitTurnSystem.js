@@ -1062,7 +1062,7 @@ var WaitTurnOrderManager = {
 
             unit = FusionControl.getFusionChild(unit);
             if (unit !== null) {
-                フュージョンされているユニットの待機状態も解除される;
+                // フュージョンされているユニットの待機状態も解除される
                 this._removeWaitState(unit);
             }
         }

@@ -1645,7 +1645,7 @@ var RewindTimeManager = {
     },
 
     createBonusRecord: function (record, newLatestRecord, latestBonus, isFirstRecord, metaSession) {
-        var bonus = metaSession.getGold();
+        var bonus = metaSession.getBonus();
 
         if (isFirstRecord || bonus !== latestBonus) {
             record.bonus = bonus;
